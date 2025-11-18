@@ -1,224 +1,85 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Peacock Detector — Upload an image</title>
+  <meta charset="UTF-8" />
+  <title>Peacock Detector</title>
+
+  <!-- TensorFlow.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+
+  <!-- MobileNet model -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
 
   <style>
     body {
-      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-      max-width: 900px;
-      margin: 36px auto;
-      padding: 16px;
-      color: #0f172a;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 30px;
     }
-    h1 { font-size: 1.6rem; margin-bottom: 4px; }
-    p.lead { color: #475569; margin: 0 0 18px 0; }
-    .card {
-      border: 1px solid #e6eef6;
-      border-radius: 12px;
-      padding: 18px;
-      box-shadow: 0 6px 20px rgba(16,24,40,0.04);
-      background: #fff;
+    #preview {
+      width: 300px;
+      margin-top: 20px;
+      border-radius: 10px;
     }
-    .controls { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
-    input[type="file"] { padding:6px; }
-    #preview { max-width: 100%; max-height: 420px; border-radius:8px; display:block; margin-top:12px; }
-    .result {
-      margin-top:12px;
-      padding: 12px;
-      border-radius: 8px;
-      font-weight: 600;
-      display:inline-block;
+    #result {
+      font-size: 22px;
+      margin-top: 15px;
+      font-weight: bold;
     }
-    .yes { background: #ecfdf5; color:#065f46; border:1px solid #bbf7d0; }
-    .no { background: #fff1f2; color:#9f1239; border:1px solid #fecaca; }
-    .pred-list { margin-top:12px; }
-    .small { font-size:0.9rem; color:#475569; }
-    footer { margin-top:18px; color:#64748b; font-size:0.85rem; }
-    .spinner { display:inline-block; width:18px; height:18px; border:2px solid #cbd5e1; border-top-color:#2563eb; border-radius:50%; animation:spin 1s linear infinite; vertical-align:middle; margin-left:8px; }
-    @keyframes spin { to { transform:rotate(360deg); } }
-    pre { background:#0b1220; color:#dbeafe; padding:12px; border-radius:8px; overflow:auto; }
   </style>
 </head>
 <body>
+
   <h1>Peacock Detector</h1>
-  <p class="lead">Upload an image — the page will tell whether the photo contains a peacock (client-side, no files uploaded anywhere).</p>
 
-  <div class="card">
-    <div class="controls">
-      <label>
-        <strong>Choose image</strong>
-        <input id="fileInput" type="file" accept="image/*" />
-      </label>
+  <input type="file" id="upload" accept="image/*" /><br>
+  <img id="preview" />
 
-      <button id="classifyBtn" disabled>Classify image</button>
-      <div id="status" class="small" aria-live="polite"></div>
-    </div>
-
-    <img id="preview" alt="Image preview" style="display:none" />
-
-    <div id="decisionArea" style="display:none; margin-top:12px;">
-      <div id="decision" class="result"></div>
-      <div id="predictions" class="pred-list small"></div>
-    </div>
-
-    <div id="debug" style="margin-top:10px; display:none;">
-      <details>
-        <summary>Debug / raw predictions</summary>
-        <pre id="raw"></pre>
-      </details>
-    </div>
-  </div>
-
-  <footer>
-    This runs <strong>entirely in your browser</strong> using TensorFlow.js MobileNet. Works offline after the page loads its JS.
-  </footer>
-
-  <!-- TensorFlow.js and MobileNet model -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@3.1.0/dist/mobilenet.min.js"></script>
+  <p id="status">Loading model… please wait...</p>
+  <p id="result"></p>
 
   <script>
-    // Elements
-    const fileInput = document.getElementById('fileInput');
-    const classifyBtn = document.getElementById('classifyBtn');
-    const preview = document.getElementById('preview');
-    const status = document.getElementById('status');
-    const decisionArea = document.getElementById('decisionArea');
-    const decision = document.getElementById('decision');
-    const predictionsEl = document.getElementById('predictions');
-    const raw = document.getElementById('raw');
-    const debug = document.getElementById('debug');
+    let model;
 
-    let model = null;
-    let loaded = false;
-    let lastImageElement = null;
-
-    // Load model on page open
     async function loadModel() {
-      status.innerHTML = 'Loading MobileNet model <span class="spinner"></span>';
       try {
-        // MobileNet v2/v3 is small enough to run in browser; we use default settings
-        model = await mobilenet.load({version: 3, multiplier: 1.0});
-        loaded = true;
-        status.textContent = 'Model loaded — you can upload an image.';
+        model = await mobilenet.load();
+        document.getElementById("status").innerText = "Model loaded ✔️";
       } catch (err) {
+        document.getElementById("status").innerText = "Error loading model!";
         console.error(err);
-        status.textContent = 'Failed to load model: ' + err.message;
       }
     }
 
     loadModel();
 
-    // When user picks a file, preview it
-    fileInput.addEventListener('change', (ev) => {
-      const file = ev.target.files && ev.target.files[0];
-      if (!file) return;
-      const url = URL.createObjectURL(file);
-      preview.src = url;
-      preview.style.display = 'block';
-      decisionArea.style.display = 'none';
-      raw.textContent = '';
-      debug.style.display = 'none';
-      classifyBtn.disabled = !loaded ? true : false;
-      status.textContent = loaded ? 'Ready to classify' : 'Model still loading...';
-    });
+    document.getElementById("upload").addEventListener("change", function (e) {
+      const file = e.target.files[0];
+      const img = document.getElementById("preview");
+      img.src = URL.createObjectURL(file);
 
-    // Helper: determine peacock from predictions
-    function isPeacock(predictions) {
-      // predictions is an array of {className, probability}
-      // We'll check className for keywords likely used in ImageNet labels:
-      // "peacock", "peafowl", "Indian peafowl", "peafowl, peacock"
-      for (const p of predictions) {
-        const label = p.className.toLowerCase();
-        // some labels may include comma-separated alternatives, e.g. "peacock, peafowl"
-        if (label.includes('peacock') || label.includes('peafowl')) {
-          return {match: true, matchedLabel: p.className, confidence: p.probability};
+      img.onload = async () => {
+        if (!model) {
+          alert("Model not loaded yet!");
+          return;
         }
-      }
-      // no direct label match; try looser heuristic: look for "bird" + colorful words
-      // (optional — not used as primary detection)
-      return {match: false};
-    }
 
-    // On click, classify the preview image
-    classifyBtn.addEventListener('click', async () => {
-      if (!loaded) { status.textContent = 'Model still loading — please wait.'; return; }
-      if (!preview.src) { status.textContent = 'Please choose an image first.'; return; }
+        const prediction = await model.classify(img);
+        console.log(prediction);
 
-      status.innerHTML = 'Classifying <span class="spinner"></span>';
-      classifyBtn.disabled = true;
-      decisionArea.style.display = 'none';
-      try {
-        // Ensure image is loaded before classification
-        await ensureImageLoaded(preview);
+        const resultBox = document.getElementById("result");
+        const className = prediction[0].className.toLowerCase();
 
-        // mobilenet.classify takes an image element
-        const preds = await model.classify(preview, 5); // top 5 predictions
-        raw.textContent = JSON.stringify(preds, null, 2);
-        debug.style.display = 'block';
-
-        // Build predictions UI
-        predictionsEl.innerHTML = '<strong>Top predictions:</strong><br>' +
-          preds.map(p => `${escapeHtml(p.className)} — ${(p.probability*100).toFixed(2)}%`).join('<br>');
-
-        const check = isPeacock(preds);
-        decisionArea.style.display = 'block';
-        if (check.match) {
-          const conf = (check.confidence*100).toFixed(2);
-          decision.textContent = `Yes — detected "${check.matchedLabel}" with ${conf}% confidence.`;
-          decision.className = 'result yes';
+        if (className.includes("peacock")) {
+          resultBox.innerHTML = "🦚 This *IS* a Peacock!";
+          resultBox.style.color = "green";
         } else {
-          decision.textContent = `No — the top labels do not indicate a peacock.`;
-          decision.className = 'result no';
+          resultBox.innerHTML = "❌ This is NOT a Peacock.";
+          resultBox.style.color = "red";
         }
-
-        status.textContent = 'Done.';
-      } catch (err) {
-        console.error(err);
-        status.textContent = 'Classification failed: ' + (err.message || err);
-      } finally {
-        classifyBtn.disabled = false;
-      }
+      };
     });
-
-    // Utility: ensure image is decoded & ready
-    function ensureImageLoaded(img) {
-      return new Promise((resolve, reject) => {
-        if (!img.complete) {
-          img.onload = () => resolve();
-          img.onerror = (e) => reject(new Error('Image load error'));
-        } else {
-          // image may still be decoding (browsers), use decode() when available
-          if (img.decode) {
-            img.decode().then(resolve).catch(reject);
-          } else {
-            resolve();
-          }
-        }
-      });
-    }
-
-    // small helper to escape HTML in labels
-    function escapeHtml(s) {
-      return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    }
-
-    // Keyboard: press Enter in file input area to trigger classify (convenience)
-    fileInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !classifyBtn.disabled) classifyBtn.click();
-    });
-
-    // If model loads after file selected, enable button
-    (async function watchModelLoad() {
-      while (!loaded) {
-        await new Promise(r => setTimeout(r, 200));
-      }
-      classifyBtn.disabled = !preview.src;
-      if (preview.src) status.textContent = 'Ready to classify';
-    })();
   </script>
+
 </body>
 </html>
